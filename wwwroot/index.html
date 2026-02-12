@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Ecommerce Store</title>
+    <style>
+        body { font-family: Arial; margin: 40px; }
+        input, button { padding: 8px; margin: 5px; }
+        .product, .cart-item { border: 1px solid #ccc; padding: 10px; margin: 10px 0; }
+        .hidden { display: none; }
+    </style>
+</head>
+<body>
+
+<h1>🛒 Ecommerce Store</h1>
+
+<!-- AUTH SECTION -->
+<div id="authSection">
+    <h3>Register</h3>
+    <input type="text" id="regUsername" placeholder="Username">
+    <input type="password" id="regPassword" placeholder="Password">
+    <button onclick="register()">Register</button>
+
+    <h3>Login</h3>
+    <input type="text" id="loginUsername" placeholder="Username">
+    <input type="password" id="loginPassword" placeholder="Password">
+    <button onclick="login()">Login</button>
+</div>
+
+<!-- MAIN STORE -->
+<div id="storeSection" class="hidden">
+
+    <button onclick="logout()">Logout</button>
+
+    <h2>Products</h2>
+    <div id="products"></div>
+
+    <h2>Your Cart</h2>
+    <button onclick="loadCart()">Refresh Cart</button>
+    <div id="cart"></div>
+
+    <button onclick="createOrder()">Checkout</button>
+
+</div>
+
+<script>
+
+const API_BASE = "https://localhost:5001/api";
+
+let userId = null;
+
+// ========== REGISTER ==========
+async function register() {
+    const username = document.getElementById("regUsername").value;
+    const password = document.getElementById("regPassword").value;
+
+    const response = await fetch(`${API_BASE}/auth/register`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, password })
+    });
+
+    alert(await response.text());
+}
+
+// ========== LOGIN ==========
+async function login() {
+    const username = document.getElementById("loginUsername").value;
+    const password = document.getElementById("loginPassword").value;
+
+    const response = await fetch(`${API_BASE}/auth/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, password })
+    });
+
+    if (!response.ok) {
+        alert("Invalid login");
+        return;
+    }
+
+    const data = await response.json();
+
+    localStorage.setItem("token", data.token);
+
+    const payload = JSON.parse(atob(data.token.split('.')[1]));
+    userId = payload.UserId;
+
+    document.getElementById("authSection").classList.add("hidden");
+    document.getElementById("storeSection").classList.remove("hidden");
+
+    loadProducts();
+}
+
+// ========== LOAD PRODUCTS ==========
+async function loadProducts() {
+    const response = await fetch(`${API_BASE}/products`);
+    const products = await response.json();
+
+    const container = document.getElementById("products");
+    container.innerHTML = "";
+
+    products.forEach(p => {
+        container.innerHTML += `
+            <div class="product">
+                <h3>${p.name}</h3>
+                <p>Price: ₹${p.price}</p>
+                <p>Stock: ${p.stock}</p>
+                <input type="number" id="qty-${p.id}" value="1" min="1">
+                <button onclick="addToCart(${p.id})">Add to Cart</button>
+            </div>
+        `;
+    });
+}
+
+// ========== ADD TO CART ==========
+async function addToCart(productId) {
+    const quantity = document.getElementById(`qty-${productId}`).value;
+
+    const token = localStorage.getItem("token");
+
+    await fetch(`${API_BASE}/cart`, {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+            "Authorization": "Bearer " + token
+        },
+        body: JSON.stringify({
+            userId: parseInt(userId),
+            productId: productId,
+            quantity: parseInt(quantity)
+        })
+    });
+
+    alert("Added to Cart");
+}
+
+// ========== LOAD CART ==========
+async function loadCart() {
+    const token = localStorage.getItem("token");
+
+    const response = await fetch(`${API_BASE}/cart/${userId}`, {
+        headers: {
+            "Authorization": "Bearer " + token
+        }
+    });
+
+    const cart = await response.json();
+
+    const container = document.getElementById("cart");
+    container.innerHTML = "";
+
+    cart.forEach(c => {
+        container.innerHTML += `
+            <div class="cart-item">
+                Product ID: ${c.productId} | Quantity: ${c.quantity}
+            </div>
+        `;
+    });
+}
+
+// ========== CREATE ORDER ==========
+async function createOrder() {
+    const token = localStorage.getItem("token");
+
+    const response = await fetch(`${API_BASE}/orders?userId=${userId}`, {
+        method: "POST",
+        headers: {
+            "Authorization": "Bearer " + token
+        }
+    });
+
+    const order = await response.json();
+
+    alert("Order Created! Total: ₹" + order.totalAmount);
+
+    loadCart();
+}
+
+// ========== LOGOUT ==========
+function logout() {
+    localStorage.removeItem("token");
+    location.reload();
+}
+
+</script>
+
+</body>
+</html>
